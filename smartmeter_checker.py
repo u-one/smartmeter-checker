@@ -11,7 +11,8 @@ import time
 class EchonetLiteClient:
     def __init__(self, serialport, baudrate):
         print("serialport={}, baudrate={}".format(serialport, baudrate))
-        self.ser = serial.Serial(serialport, baudrate)
+        self.ser = serial.Serial(serialport, baudrate, timeout=1)
+        self.scan_results = {}
 
     def send(self, command):
         self.ser.write(command.encode())
@@ -35,25 +36,62 @@ class EchonetLiteClient:
 
     def scan(self):
         duration = 6;   # スキャン時間
-        results = {} # スキャン結果の入れ物
 
-        while not "Channel" in results:
-            self.ser.write("SKSCAN 2 FFFFFFFF " + str(scanDuration) + " 0 \r\n")
+        while not b"Channel" in self.scan_results:
+            command = "SKSCAN 2 FFFFFFFF " + str(duration) + " 0 \r\n"
+            self.ser.write(command.encode())
             scan_end = False
             while not scan_end:
                 line = self.ser.readline()
                 print(line)
 
-                if line.startsWith("EVENT 22"):
+                if line.startswith(b"EVENT 22"):
                     scan_end = True
-                elif line.startswith("  ") :
-                    cols = line.strip().split(':')
-                    results[cols[0]] = cols[1]
+                    pass
+                elif line.startswith(b"  "):
+                    cols = line.strip().split(b':')
+                    self.scan_results[cols[0]] = cols[1]
             duration+=1
-            if duration > 7 and not "Channel" in results:
+            if duration > 8 and not b"Channel" in self.scan_results:
                 # 引数としては14まで指定できるが、7で失敗したらそれ以上は無駄らしい
                 print("scan failed")
                 sys.exit()
+
+    def set_channel(self):
+        # スキャン結果からChannelを設定。
+        command = "SKSREG S2 " + self.scan_results[b"Channel"].decode() + "\r\n"
+        self.send(command)
+
+    def set_panid(self):
+        # スキャン結果からPan IDを設定
+        command = "SKSREG S3 " + self.scan_results[b"Pan ID"].decode() + "\r\n"
+        self.send(command)
+
+    def translate_address(self):
+        # MACアドレス(64bit)をIPV6リンクローカルアドレスに変換
+        command = "SKLL64 " + self.scan_results[b"Addr"].decode() + "\r\n"
+        self.ser.write(command.encode())
+        print(self.ser.readline(), end="") # エコーバック
+        self.ipv6Addr = self.ser.readline().strip().decode()
+        print(self.ipv6Addr)
+
+    def start_join(self):
+        # PANA 接続シーケンスを開始します。
+        command = "SKJOIN " + self.ipv6Addr + "\r\n"
+        print(command)
+
+    def wait_join(self):
+        # PANA 接続完了待ち（10行ぐらいなんか返してくる）
+        bConnected = False
+        while not bConnected :
+            line = ser.readline()
+            print(line, end="")
+            if line.startswith("EVENT 24") :
+                print("PANA 接続失敗")↲
+                sys.exit()  #### 糸冬了 ####↲
+            elif line.startswith("EVENT 25") :
+                # 接続完了！
+                bConnected = True
 
 
 def parse_args():
@@ -80,8 +118,13 @@ def main():
 
     client = EchonetLiteClient(serialport, baudrate)
     client.ver()
-    #client.set_id(args.b_route_id)
-    #client.set_pw(args.b_route_password)
+    client.set_id(args.b_route_id)
+    client.set_pw(args.b_route_password)
+    client.scan()
+    client.set_channel()
+    client.set_panid()
+    client.translate_address()
+    client.start_join()
 
 if __name__ == '__main__':
     main()
