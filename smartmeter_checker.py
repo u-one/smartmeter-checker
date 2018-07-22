@@ -78,20 +78,71 @@ class EchonetLiteClient:
     def start_join(self):
         # PANA 接続シーケンスを開始します。
         command = "SKJOIN " + self.ipv6Addr + "\r\n"
-        print(command)
+        self.ser.write(command.encode())
+        print(self.ser.readline(), end="\n") # エコーバック↲
+        print(self.ser.readline(), end="\n") # OKが来るはず（チェック無し）↲
 
     def wait_join(self):
         # PANA 接続完了待ち（10行ぐらいなんか返してくる）
-        bConnected = False
-        while not bConnected :
-            line = ser.readline()
-            print(line, end="")
-            if line.startswith("EVENT 24") :
-                print("PANA 接続失敗")↲
-                sys.exit()  #### 糸冬了 ####↲
-            elif line.startswith("EVENT 25") :
-                # 接続完了！
-                bConnected = True
+        connected = False
+        while not connected:
+            line = self.ser.readline()
+            print(line, end="\n")
+            if line.startswith(b"EVENT 24") :
+                print("join failed")
+                sys.exit()
+            elif line.startswith(b"EVENT 25") :
+                connected = True
+
+    def read_instane_list(self):
+        self.ser.timeout = 2
+        # スマートメーターがインスタンスリスト通知を投げてくる
+        # (ECHONET-Lite_Ver.1.12_02.pdf p.4-16)
+        print(self.ser.readline(), end="\n") #無視
+
+    def build_frame(self):
+        # ECHONET Lite フレーム作成
+        # 　参考資料
+        # 　・ECHONET-Lite_Ver.1.12_02.pdf (以下 EL)
+        # 　・Appendix_H.pdf (以下 AppH)
+        frame = ""
+        frame += "\x10\x81"      # EHD (参考:EL p.3-2)
+        frame += "\x00\x01"      # TID (参考:EL p.3-3)
+        # ここから EDATA
+        frame += "\x05\xFF\x01"  # SEOJ (参考:EL p.3-3 AppH p.3-408～)
+        frame += "\x02\x88\x01"  # DEOJ (参考:EL p.3-3 AppH p.3-274～)
+        frame += "\x62"          # ESV(62:プロパティ値読み出し要求) (参考:EL p.3-5)
+        frame += "\x01"          # OPC(1個)(参考:EL p.3-7)
+        frame += "\xE7"          # EPC(参考:EL p.3-7 AppH p.3-275)
+        frame += "\x00"          # PDC(参考:EL p.3-9)
+        return frame
+
+    def getValue(self):
+        frame = self.build_frame()
+        command = "SKSENDTO 1 {0} 0E1A 1 {1:04X} {2}".format(self.ipv6Addr, len(frame), frame)
+        self.ser.write(command.encode())
+        print(self.ser.readline(), end="\n") # エコーバック
+        print(self.ser.readline(), end="\n") # EVENT 21 が来るはず（チェック無し）
+        print(self.ser.readline(), end="\n") # OKが来るはず（チェック無し）
+        line = self.ser.readline()         # ERXUDPが来るはず
+        print(line, end="\n")
+
+        if line.startswith(b"ERXUDP"):
+            cols = line.strip().split(' ')
+            res = cols[8]  # UDP受信データ部分
+            #tid = res[4:4+4];
+            seoj = res[8:8+6]
+            #deoj = res[14,14+6]
+            ESV = res[20:20+2]
+            #OPC = res[22,22+2]
+            if seoj == "028801" and ESV == "72":
+                # スマートメーター(028801)から来た応答(72)なら
+                EPC = res[24:24+2]
+                if EPC == "E7":
+                    # 内容が瞬時電力計測値(E7)だったら
+                    hexPower = line[-8:]    # 最後の4バイト（16進数で8文字）が瞬時電力計測値
+                    intPower = int(hexPower, 16)
+                    print(u"瞬時電力計測値:{0}[W]\n".format(intPower))
 
 
 def parse_args():
@@ -125,6 +176,9 @@ def main():
     client.set_panid()
     client.translate_address()
     client.start_join()
+    client.wait_join()
+    client.read_instane_list()
+    client.getValue()
 
 if __name__ == '__main__':
     main()
