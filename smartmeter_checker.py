@@ -147,11 +147,9 @@ class EchonetLiteClient:
         print(b"seoj:" + seoj)
         print(b"ESV:" + ESV)
         if seoj == b"\x02\x88\x01" and ESV == b"\x72":
-            print("A")
             # スマートメーター(028801)から来た応答(72)なら
             EPC = res[12:12+1]
             if EPC == b"\xE7":
-                print("B")
                 # 内容が瞬時電力計測値(E7)だったら
                 hexPower = res[-4:]    # 最後の4バイト（16進数で8文字）が瞬時電力計測値
                 print(b"hexPower:" + hexPower)
@@ -160,6 +158,8 @@ class EchonetLiteClient:
                 temp = temp + hexPower[2] << 8
                 temp = temp + hexPower[3]
                 print(u"瞬時電力計測値:{0}[W]\n".format(temp))
+                return True
+        return False
 
 
     def getValue(self):
@@ -181,13 +181,27 @@ class EchonetLiteClient:
             print(line, end="\n")
 
             if line.startswith(b"ERXUDP"):
-                self.handle_ERXUDP(line)
+                res = self.handle_ERXUDP(line)
+                if res:
+                    return
 
     def close(self):
         self.ser.write(b"SKTERM\r\n")
         print(self.ser.readline(), end="") # エコーバック
-        print(self.ser.readline(), end="")
+        print(self.ser.readline())
         self.ser.close()
+
+    def connect(self, id, password):
+        self.set_id(id)
+        self.set_pw(password)
+        self.scan()
+        self.translate_address()
+        self.set_channel()
+        self.set_panid()
+        self.start_join()
+        self.wait_join()
+        self.read_instane_list()
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -214,19 +228,11 @@ def main():
 
         client = EchonetLiteClient(serialport, baudrate)
         client.ver()
-        client.set_id(args.b_route_id)
-        client.set_pw(args.b_route_password)
-        client.scan()
-        client.translate_address()
-        client.set_channel()
-        client.set_panid()
-        client.start_join()
-        client.wait_join()
-        client.read_instane_list()
+        client.connect(args.b_route_id, args.b_route_password) 
         client.getValue()
 
     except KeyboardInterrupt:
-        print("KeyboardInterrupt\n")
+        print("KeyboardInterrupt")
     finally:
         client.close()
 
