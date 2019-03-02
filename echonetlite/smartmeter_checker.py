@@ -3,10 +3,8 @@
 
 from __future__ import print_function
 
-import argparse
 import sys
 import serial
-import time
 import codecs
 
 class EchonetLiteClient:
@@ -139,9 +137,10 @@ class EchonetLiteClient:
         print("handle_ERXUDP")
         cols = line.strip().split(b' ')
         res = cols[9]  # UDP受信データ部分
-        #tid = res[4:4+4];
+        print(res)
+        #tid = res[2:2+2];
         seoj = res[4:4+3]
-        #deoj = res[14,14+6]
+        #deoj = res[7,7+3]
         ESV = res[10:10+1]
         #OPC = res[22,22+2]
         print(b"seoj:" + seoj)
@@ -202,39 +201,3 @@ class EchonetLiteClient:
         self.wait_join()
         self.read_instane_list()
 
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    # 必須
-    parser.add_argument("b_route_id", help="Bルート認証ID")
-    parser.add_argument("b_route_password", help="Bルート認証パスワード")
-    # 任意
-    parser.add_argument("--serialport", help="optional")
-    parser.add_argument("--baudrate", help="optional")
-    return parser.parse_args()
-
-serialport = '/dev/ttyUSB0'  # linux
-#serialport = 'COM1' # windows
-#serialport = '/dev/cu.usbserial-XXXXX'    # mac
-baudrate = 115200
-
-def main():
-    try:
-        args = parse_args()
-        if hasattr(args, 'serialport'):
-            serialport = args.serialport
-        if hasattr(args, 'baudrate'):
-            baudrate = args.baudrate
-
-        client = EchonetLiteClient(serialport, baudrate)
-        client.ver()
-        client.connect(args.b_route_id, args.b_route_password) 
-        client.getValue()
-
-    except KeyboardInterrupt:
-        print("KeyboardInterrupt")
-    finally:
-        client.close()
-
-if __name__ == '__main__':
-    main()
