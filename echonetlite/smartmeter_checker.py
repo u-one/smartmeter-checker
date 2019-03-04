@@ -150,15 +150,17 @@ class EchonetLiteClient:
             EPC = res[12:12+1]
             if EPC == b"\xE7":
                 # 内容が瞬時電力計測値(E7)だったら
-                hexPower = res[-4:]    # 最後の4バイト（16進数で8文字）が瞬時電力計測値
+                hexPower = res[14:]    # 最後の4バイト（16進数で8文字）が瞬時電力計測値
                 print(b"hexPower:" + hexPower)
                 temp = hexPower[0] << 24
                 temp = temp + hexPower[1] << 16
-                temp = temp + hexPower[2] << 8
-                temp = temp + hexPower[3]
+                if len(hexPower) > 2:
+                    temp = temp + hexPower[2] << 8
+                if len(hexPower) > 3:
+                    temp = temp + hexPower[3]
                 print(u"瞬時電力計測値:{0}[W]\n".format(temp))
-                return True
-        return False
+                return True, temp
+        return False, 0
 
 
     def getValue(self):
@@ -172,7 +174,9 @@ class EchonetLiteClient:
         # b"hoge" がpython2同等らしい
         self.ser.write(command)
 
+        num = 0
         while True:
+            num += 1
             #print(self.ser.readline(), end="\n") # エコーバック
             #print(self.ser.readline(), end="\n") # EVENT 21 が来るはず（チェック無し）
             #print(self.ser.readline(), end="\n") # OKが来るはず（チェック無し）
@@ -180,9 +184,11 @@ class EchonetLiteClient:
             print(line, end="\n")
 
             if line.startswith(b"ERXUDP"):
-                res = self.handle_ERXUDP(line)
+                res, val = self.handle_ERXUDP(line)
                 if res:
-                    return
+                    return True, val
+            if num > 5:
+                return False, 0
 
     def close(self):
         self.ser.write(b"SKTERM\r\n")
