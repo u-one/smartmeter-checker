@@ -51,12 +51,18 @@ try:
     client.ver()
     client.connect(args.b_route_id, args.b_route_password) 
 
-    #thread = threading.Thread(target=get_loop)
-    #thread.start()
+#    thread = threading.Thread(target=get_loop)
+#    thread.start()
+
+
+    print("start_http_server")
 
     start_http_server(8081)
 
+    print("get_loop")
+
     get_loop()
+
 
 
 except KeyboardInterrupt:
