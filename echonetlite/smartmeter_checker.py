@@ -7,10 +7,25 @@ import sys
 import serial
 import codecs
 
+class SerialPort:
+    def __init__(self, serialport, baudrate):
+        self.port = serial.Serial(serialport, baudrate, timeout=1)
+        print("initialize")
+
+    def write(self, data):
+        self.port.write(data)
+        #print(data)
+
+    def readline(self):
+        return self.port.readline()
+
+    def close(self):
+        self.port.close()
+
 class EchonetLiteClient:
     def __init__(self, serialport, baudrate):
         print("serialport={}, baudrate={}".format(serialport, baudrate))
-        self.ser = serial.Serial(serialport, baudrate, timeout=1)
+        self.ser = SerialPort(serialport, baudrate)
         self.scan_results = {}
 
     def send(self, command):
