@@ -151,6 +151,9 @@ class EchonetLiteClient:
     def handle_ERXUDP(self, line):
         print("handle_ERXUDP")
         cols = line.strip().split(b' ')
+        if len(cols) < 10:
+            print(u"Error invalid line: " + line)
+            return False, 0
         res = cols[9]  # UDP受信データ部分
         print(res)
         #tid = res[2:2+2];
